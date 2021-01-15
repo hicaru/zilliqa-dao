@@ -1,5 +1,7 @@
 scilla_version 0
 
+import BoolUtils
+
 library ZilliqaDAO
 
 (* Constants *)
@@ -31,15 +33,17 @@ type Error =
   | CodeIsNotGZILContract
   | CodePausenot_pause
   | CodeNotAuthorised
+  | CodeIsNotOwnerOrOperator
 
 let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeInsufficientAmount => Int32 -1
-      | CodeIsNotGZILContract  => Int32 -2
-      | CodePausenot_pause     => Int32 -3
-      | CodeNotAuthorised      => Int32 -4
+      | CodeInsufficientAmount   => Int32 -1
+      | CodeIsNotGZILContract    => Int32 -2
+      | CodePausenot_pause       => Int32 -3
+      | CodeNotAuthorised        => Int32 -4
+      | CodeIsNotOwnerOrOperator => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -82,6 +86,26 @@ procedure checkPause(expected: Uint32)
   | True =>
   | False =>
     err = CodePausenot_pause;
+    ThrowError err
+  end
+end
+
+procedure isOwnerOrOperator(to: ByStr20)
+  some_operator <- operators[to];
+
+  is_operator = match some_operator with
+    | None => False
+    | Some operator =>
+      builtin eq operator _sender
+    end;
+
+  is_owner = builtin eq to _sender;
+  is_allow = orb is_operator is_owner;
+
+  match is_allow with
+  | True =>
+  | False =>
+    err = CodeIsNotOwnerOrOperator;
     ThrowError err
   end
 end
@@ -133,6 +157,31 @@ procedure delegateStake(amount: Uint128, ssnaddr: ByStr20)
   };
   msgs = one_msg delegate_call;
   send msgs
+end
+
+procedure callTransfer(addres: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "Transfer";
+    _recipient: gzil_contract;
+    _amount: zero_128;
+    to: addres;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
+procedure withdrawGZIL(to: ByStr20)
+  some_balance <- voters[to];
+
+  match some_balance with
+  | Some balance =>
+    updateTokenCount sub_operation to balance;
+    callTransfer to balance
+  | None =>
+    err = CodeInsufficientAmount;
+    ThrowError err
+  end
 end
 
 (* Checking contract owner is _sender. *)
@@ -217,6 +266,12 @@ transition Deposit(ssnaddr: ByStr20)
     };
     event e
   end
+end
+
+transition Withdraw(to: ByStr20)
+  checkPause on_pause;
+  isOwnerOrOperator to;
+  withdrawGZIL to
 end
 
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
