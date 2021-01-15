@@ -110,7 +110,7 @@ procedure isOwnerOrOperator(to: ByStr20)
   end
 end
 
-procedure isZLPContract()
+procedure isGZILContract()
   is_zlp_sender = builtin eq gzil_contract _sender;
 
   match is_zlp_sender with
@@ -144,7 +144,7 @@ end
 
 procedure addGZIL(from: ByStr20, amount: Uint128)
   checkPause not_pause;
-  isZLPContract;
+  isGZILContract;
   updateTokenCount add_operation from amount
 end
 
