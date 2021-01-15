@@ -1,0 +1,202 @@
+scilla_version 0
+
+library ZilliqaDAO
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+type Operation =
+  | Add
+  | Sub
+
+(* Error events *)
+type Error =
+  | CodeInsufficientAmount
+  | CodeIsNotGZILContract
+  | CodePauseNotPause
+  | CodeNotAuthorised
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeInsufficientAmount => Int32 -1
+      | CodeIsNotGZILContract  => Int32 -2
+      | CodePauseNotPause      => Int32 -3
+      | CodeNotAuthorised      => Int32 -4
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+(* Constants *)
+let NOT_PAUSE = Uint32 0
+let ON_PAUSE = Uint32 1
+
+let ZERO_256 = Uint32 1
+
+let add_operation = Add
+let sub_operation = Sub
+
+let option_uint256 = @option_value Uint256
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+contract ZilliqaDAO
+
+(*  Parameters *)
+(contract_owner: ByStr20,
+ staking_contract: ByStr20,
+ gzil_contract: ByStr20)
+
+(* Mutable fields *)
+(* Minimal gZIL for donate. *)
+field min_gzil: Uint256 = Uint256 10
+(* State of contract pause. *)
+field pause: Uint32 = NOT_PAUSE
+
+field donator: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field voters: Map ByStr20 Uint256 = Emp ByStr20 Uint256
+field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+(* Checking contract on pause state. *)
+procedure checkPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
+    ThrowError err
+  end
+end
+
+procedure isZLPContract()
+  is_zlp_sender = builtin eq gzil_contract _sender;
+
+  match is_zlp_sender with
+  | True =>
+  | False =>
+    err = CodeIsNotGZILContract;
+    ThrowError err
+  end
+end
+
+procedure updateTokenCount(operation: Operation, address: ByStr20, amount: Uint128)
+  some_to_count <- voters[address];
+  current_count = option_uint256 ZERO_256 some_to_count;
+
+  match operation with
+  | Add =>
+    new_to_count = builtin add current_count amount;
+    voters[address] := new_to_count
+  | Sub =>
+    is_insufficient = builtin lt current_count amount;
+    match is_insufficient with
+      | False => 
+        new_to_count = builtin sub current_count amount;
+        voters[address] := new_to_count
+      | True =>
+        err = CodeInsufficientZLPAmount;
+        ThrowError err
+      end
+  end
+end
+
+procedure addGZIL(from: ByStr20, amount: Uint128)
+  checkPause NOT_PAUSE;
+  isZLPContract;
+  updateTokenCount add_operation from amount
+end
+
+(* Checking contract owner is _sender. *)
+procedure IsOwner()
+  is_owner = builtin eq contract_owner _sender;
+
+  match is_owner with
+  | True =>
+  | False =>
+    err = CodeNotAuthorised;
+    ThrowError err
+  end
+end
+
+(* Getters *)
+transition balanceZLPOf(address: ByStr20)
+  some_bal <- voters[address];
+  balance = option_uint256 ZERO_256 bal;
+
+  msg_to_sender = {
+    _tag : "balanceOfCallBack";
+    _recipient : _sender; 
+    _amount : Uint128 0;
+    address: address;
+    balance : balance
+  };
+  msgs = one_msg msg_to_sender;
+  send msgs
+end
+(* Getters *)
+
+transition SetMinGZIL(amount: Uint256)
+  IsOwner;
+
+  old_state <- min_gzil;
+
+  min_gzil := amount;
+
+  e = {
+    _eventname: "MinimalVoteGZILChanged";
+    old: old_state;
+    new: amount
+  };
+  event e
+end
+
+transition ChangePause()
+  IsContractOwner;
+  status <- pause;
+  is_pause = builtin eq status ON_PAUSE;
+
+  e = {
+    _eventname : "PauseEvent";
+    pause : is_pause
+  };
+  event e;
+
+  match is_pause with
+  | True =>
+    pause := NOT_PAUSE
+  | False =>
+    pause := ON_PAUSE
+  end
+end
+
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+  addGZIL sender amount
+end
+
+transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+  addGZIL sender amount;
+  operators[sender] := initiator
+end
+
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
