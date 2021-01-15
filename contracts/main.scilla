@@ -2,6 +2,11 @@ scilla_version 0
 
 library ZilliqaDAO
 
+(* Constants *)
+let not_pause = Uint32 0
+let on_pause  = Uint32 1
+let zero_128  = Uint128 1
+
 let one_msg = 
   fun (msg : Message) => 
   let nil_msg = Nil {Message} in
@@ -24,7 +29,7 @@ type Operation =
 type Error =
   | CodeInsufficientAmount
   | CodeIsNotGZILContract
-  | CodePauseNotPause
+  | CodePausenot_pause
   | CodeNotAuthorised
 
 let make_error =
@@ -33,28 +38,21 @@ let make_error =
       match result with
       | CodeInsufficientAmount => Int32 -1
       | CodeIsNotGZILContract  => Int32 -2
-      | CodePauseNotPause      => Int32 -3
+      | CodePausenot_pause     => Int32 -3
       | CodeNotAuthorised      => Int32 -4
       end
     in
     { _exception : "Error"; code : result_code }
 
-(* Constants *)
-let NOT_PAUSE = Uint32 0
-let ON_PAUSE = Uint32 1
-
-let ZERO_256 = Uint32 1
-
 let add_operation = Add
 let sub_operation = Sub
 
-let option_uint256 = @option_value Uint256
+let option_uint128 = @option_value Uint128
 
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
 contract ZilliqaDAO
-
 (*  Parameters *)
 (contract_owner: ByStr20,
  staking_contract: ByStr20,
@@ -62,12 +60,12 @@ contract ZilliqaDAO
 
 (* Mutable fields *)
 (* Minimal gZIL for donate. *)
-field min_gzil: Uint256 = Uint256 10
+field min_gzil: Uint128 = Uint128 10
 (* State of contract pause. *)
-field pause: Uint32 = NOT_PAUSE
+field pause: Uint32 = not_pause
 
 field donator: Map ByStr20 Uint128 = Emp ByStr20 Uint128
-field voters: Map ByStr20 Uint256 = Emp ByStr20 Uint256
+field voters: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
 
 (* Emit Errors *)
@@ -83,7 +81,7 @@ procedure checkPause(expected: Uint32)
   match is_eq with
   | True =>
   | False =>
-    err = CodePauseNotPause;
+    err = CodePausenot_pause;
     ThrowError err
   end
 end
@@ -101,7 +99,7 @@ end
 
 procedure updateTokenCount(operation: Operation, address: ByStr20, amount: Uint128)
   some_to_count <- voters[address];
-  current_count = option_uint256 ZERO_256 some_to_count;
+  current_count = option_uint128 zero_128 some_to_count;
 
   match operation with
   | Add =>
@@ -114,14 +112,14 @@ procedure updateTokenCount(operation: Operation, address: ByStr20, amount: Uint1
         new_to_count = builtin sub current_count amount;
         voters[address] := new_to_count
       | True =>
-        err = CodeInsufficientZLPAmount;
+        err = CodeInsufficientAmount;
         ThrowError err
       end
   end
 end
 
 procedure addGZIL(from: ByStr20, amount: Uint128)
-  checkPause NOT_PAUSE;
+  checkPause not_pause;
   isZLPContract;
   updateTokenCount add_operation from amount
 end
@@ -139,9 +137,9 @@ procedure IsOwner()
 end
 
 (* Getters *)
-transition balanceZLPOf(address: ByStr20)
+transition balanceOf(address: ByStr20)
   some_bal <- voters[address];
-  balance = option_uint256 ZERO_256 bal;
+  balance = option_uint128 zero_128 some_bal;
 
   msg_to_sender = {
     _tag : "balanceOfCallBack";
@@ -155,7 +153,7 @@ transition balanceZLPOf(address: ByStr20)
 end
 (* Getters *)
 
-transition SetMinGZIL(amount: Uint256)
+transition SetMinGZIL(amount: Uint128)
   IsOwner;
 
   old_state <- min_gzil;
@@ -171,9 +169,9 @@ transition SetMinGZIL(amount: Uint256)
 end
 
 transition ChangePause()
-  IsContractOwner;
+  IsOwner;
   status <- pause;
-  is_pause = builtin eq status ON_PAUSE;
+  is_pause = builtin eq status on_pause;
 
   e = {
     _eventname : "PauseEvent";
@@ -183,9 +181,9 @@ transition ChangePause()
 
   match is_pause with
   | True =>
-    pause := NOT_PAUSE
+    pause := not_pause
   | False =>
-    pause := ON_PAUSE
+    pause := on_pause
   end
 end
 
