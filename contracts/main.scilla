@@ -324,11 +324,18 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
 end
 
 transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint128)
-  (* Need check  recipient to eq this_address *)
-  current_token_balance <- token_balance;
-  new_token_balance = builtin add current_token_balance amount;
+  is_token_contract = builtin eq _sender gzil_contract;
+  match is_token_contract with
+  | True =>
+    (* Need check  recipient to eq this_address *)
+    current_token_balance <- token_balance;
+    new_token_balance = builtin add current_token_balance amount;
 
-  token_balance := new_token_balance
+    token_balance := new_token_balance
+  | False =>
+    err = CodeNotAuthorised;
+    ThrowError err
+  end
 end
 
 transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
