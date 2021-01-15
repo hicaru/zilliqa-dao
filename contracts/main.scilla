@@ -174,8 +174,8 @@ transition ChangePause()
   is_pause = builtin eq status on_pause;
 
   e = {
-    _eventname : "PauseEvent";
-    pause : is_pause
+    _eventname: "PauseEvent";
+    pause: is_pause
   };
   event e;
 
@@ -184,6 +184,24 @@ transition ChangePause()
     pause := not_pause
   | False =>
     pause := on_pause
+  end
+end
+
+transition Deposit()
+  is_zero = builtin eq _amount zero_128;
+
+  match is_zero with
+  | True =>
+    err = CodeInsufficientAmount;
+    ThrowError err
+  | False =>
+    accept;
+    donator[_sender] := _amount;
+    e = {
+      _eventname: "DepositEvent";
+      deposited: _amount
+    };
+    event e
   end
 end
 
