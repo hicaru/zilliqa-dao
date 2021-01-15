@@ -60,7 +60,8 @@ contract ZilliqaDAO
 (*  Parameters *)
 (contract_owner: ByStr20,
  proxy_staking_contract: ByStr20,
- gzil_contract: ByStr20)
+ gzil_contract: ByStr20,
+ default_sender: ByStr20)
 
 (* Mutable fields *)
 (* Minimal gZIL for donate. *)
@@ -68,6 +69,8 @@ field min_gzil: Uint128 = Uint128 10
 (* State of contract pause. *)
 field pause: Uint32 = not_pause
 
+field last_claim: BNum = BNum 0
+field blocks_for_claim: BNum = BNum 1800
 field donator: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field voters: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
@@ -148,12 +151,23 @@ procedure addGZIL(from: ByStr20, amount: Uint128)
   updateTokenCount add_operation from amount
 end
 
-procedure delegateStake(amount: Uint128, ssnaddr: ByStr20)
+procedure delegateStake(amount: Uint128)
   delegate_call = {
     _tag: "DelegateStake";
     _recipient: proxy_staking_contract;
     _amount: amount;
-    ssnaddr: ssnaddr
+    ssnaddr: default_sender
+  };
+  msgs = one_msg delegate_call;
+  send msgs
+end
+
+procedure withdrawStakeRewards(amount: Uint128)
+  delegate_call = {
+    _tag: "WithdrawStakeRewards";
+    _recipient: proxy_staking_contract;
+    _amount: amount;
+    ssnaddr: default_sender
   };
   msgs = one_msg delegate_call;
   send msgs
@@ -228,6 +242,21 @@ transition SetMinGZIL(amount: Uint128)
   event e
 end
 
+transition SetBlocksForClaim(value: BNum)
+  IsOwner;
+
+  old_state <- blocks_for_claim;
+
+  blocks_for_claim := value;
+
+  e = {
+    _eventname: "BlocksForClaimChanged";
+    old: old_state;
+    new: value
+  };
+  event e
+end
+
 transition ChangePause()
   IsOwner;
   status <- pause;
@@ -247,7 +276,7 @@ transition ChangePause()
   end
 end
 
-transition Deposit(ssnaddr: ByStr20)
+transition Deposit()
   is_zero = builtin eq _amount zero_128;
 
   match is_zero with
@@ -258,7 +287,7 @@ transition Deposit(ssnaddr: ByStr20)
     accept;
     donator[_sender] := _amount;
 
-    delegateStake _amount ssnaddr;
+    delegateStake _amount;
 
     e = {
       _eventname: "DepositEvent";
@@ -273,6 +302,10 @@ transition Withdraw(to: ByStr20)
   isOwnerOrOperator to;
   withdrawGZIL to
 end
+
+(* transition Claim()
+  withdrawStakeRewards
+end *)
 
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   addGZIL sender amount
