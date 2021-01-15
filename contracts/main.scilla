@@ -55,7 +55,7 @@ let option_uint128 = @option_value Uint128
 contract ZilliqaDAO
 (*  Parameters *)
 (contract_owner: ByStr20,
- staking_contract: ByStr20,
+ proxy_staking_contract: ByStr20,
  gzil_contract: ByStr20)
 
 (* Mutable fields *)
@@ -124,6 +124,17 @@ procedure addGZIL(from: ByStr20, amount: Uint128)
   updateTokenCount add_operation from amount
 end
 
+procedure delegateStake(amount: Uint128, ssnaddr: ByStr20)
+  delegate_call = {
+    _tag: "DelegateStake";
+    _recipient: proxy_staking_contract;
+    _amount: amount;
+    ssnaddr: ssnaddr
+  };
+  msgs = one_msg delegate_call;
+  send msgs
+end
+
 (* Checking contract owner is _sender. *)
 procedure IsOwner()
   is_owner = builtin eq contract_owner _sender;
@@ -187,7 +198,7 @@ transition ChangePause()
   end
 end
 
-transition Deposit()
+transition Deposit(ssnaddr: ByStr20)
   is_zero = builtin eq _amount zero_128;
 
   match is_zero with
@@ -197,6 +208,9 @@ transition Deposit()
   | False =>
     accept;
     donator[_sender] := _amount;
+
+    delegateStake _amount ssnaddr;
+
     e = {
       _eventname: "DepositEvent";
       deposited: _amount
