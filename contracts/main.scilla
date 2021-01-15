@@ -61,7 +61,7 @@ contract ZilliqaDAO
 (contract_owner: ByStr20,
  proxy_staking_contract: ByStr20,
  gzil_contract: ByStr20,
- default_sender: ByStr20)
+ default_ssn: ByStr20)
 
 (* Mutable fields *)
 (* Minimal gZIL for donate. *)
@@ -71,6 +71,9 @@ field pause: Uint32 = not_pause
 
 field last_claim: BNum = BNum 0
 field blocks_for_claim: BNum = BNum 1800
+
+field delegated: Uint128 = Uint128 0
+field token_balance: Uint128 = Uint128 0
 field donator: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field voters: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
@@ -156,18 +159,18 @@ procedure delegateStake(amount: Uint128)
     _tag: "DelegateStake";
     _recipient: proxy_staking_contract;
     _amount: amount;
-    ssnaddr: default_sender
+    ssnaddr: default_ssn
   };
   msgs = one_msg delegate_call;
   send msgs
 end
 
-procedure withdrawStakeRewards(amount: Uint128)
+procedure withdrawStakeRewards()
   delegate_call = {
     _tag: "WithdrawStakeRewards";
     _recipient: proxy_staking_contract;
-    _amount: amount;
-    ssnaddr: default_sender
+    _amount: Uint128 0;
+    ssnaddr: default_ssn
   };
   msgs = one_msg delegate_call;
   send msgs
@@ -277,7 +280,9 @@ transition ChangePause()
 end
 
 transition Deposit()
+  delegated_amount <- delegated;
   is_zero = builtin eq _amount zero_128;
+  new_delegated = builtin add delegated_amount _amount;
 
   match is_zero with
   | True =>
@@ -285,7 +290,9 @@ transition Deposit()
     ThrowError err
   | False =>
     accept;
+
     donator[_sender] := _amount;
+    delegated := new_delegated;
 
     delegateStake _amount;
 
@@ -303,9 +310,9 @@ transition Withdraw(to: ByStr20)
   withdrawGZIL to
 end
 
-(* transition Claim()
+transition Claim()
   withdrawStakeRewards
-end *)
+end
 
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   addGZIL sender amount
@@ -316,8 +323,19 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
   operators[sender] := initiator
 end
 
+transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint128)
+  (* Need check  recipient to eq this_address *)
+  current_token_balance <- token_balance;
+  new_token_balance = builtin add current_token_balance amount;
+
+  token_balance := new_token_balance
+end
+
 transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 
 transition DelegateStakeSuccessCallBack(ssnaddr: ByStr20, amount: Uint128)
+end
+
+transition WithdrawStakeRewardsSuccessCallBack(ssnaddr: ByStr20, rewards: Uint128)
 end
