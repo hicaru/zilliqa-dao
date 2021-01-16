@@ -300,8 +300,12 @@ end
 
 transition Deposit()
   delegated_amount <- delegated;
+  some_last_deposit <- donator[_sender];
+
   is_zero = builtin eq _amount zero_128;
   new_delegated = builtin add delegated_amount _amount;
+  last_deposit = option_uint128 zero_128 some_last_deposit;
+  new_deposit = builtin add last_deposit _amount;
 
   match is_zero with
   | True =>
@@ -311,7 +315,7 @@ transition Deposit()
     accept;
 
     donator[_sender] := _amount;
-    delegated := new_delegated;
+    delegated := new_deposit;
 
     delegateStake _amount;
 
