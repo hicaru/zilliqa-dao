@@ -358,7 +358,7 @@ transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint
 end
 
 transition AddFunds()
-  accept;
+  accept
 end
 
 transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
