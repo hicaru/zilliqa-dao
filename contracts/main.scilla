@@ -8,6 +8,7 @@ library ZilliqaDAO
 let not_pause = Uint32 0
 let on_pause  = Uint32 1
 let zero_128  = Uint128 1
+let zero_bn  = BNum 0
 
 let one_msg = 
   fun (msg : Message) => 
@@ -71,7 +72,7 @@ field min_gzil: Uint128 = Uint128 10
 (* State of contract pause. *)
 field pause: Uint32 = not_pause
 
-field last_claim: BNum = BNum 0
+field last_claim: BNum = zero_bn
 field blocks_for_claim: BNum = BNum 1800
 
 field delegated: Uint128 = Uint128 0
@@ -98,14 +99,12 @@ procedure checkPause(expected: Uint32)
   end
 end
 
-procedure canClaim()
-  current_block <- & BLOCKNUMBER;
+procedure canClaim(current_block: BNum)
   for_claim <- blocks_for_claim;
   current_last_claim <- last_claim;
 
-  bn_zero = BNum 0;
   difference = builtin bsub current_block current_last_claim;
-  int_256_for_claim = builtin bsub for_claim bn_zero;
+  int_256_for_claim = builtin bsub for_claim zero_bn;
   is_can_claim = builtin lt int_256_for_claim difference;
 
   match is_can_claim with
@@ -174,7 +173,9 @@ procedure addGZIL(from: ByStr20, amount: Uint128)
   updateTokenCount add_operation from amount
 end
 
-procedure delegateStake(amount: Uint128)
+procedure delegateStake()
+  amount <- _balance;
+
   delegate_call = {
     _tag: "DelegateStake";
     _recipient: proxy_staking_contract;
@@ -314,7 +315,7 @@ transition Deposit()
     donator[_sender] := _amount;
     delegated := new_delegated;
 
-    delegateStake _amount;
+    delegateStake;
 
     e = {
       _eventname: "DepositEvent";
@@ -331,8 +332,12 @@ transition Withdraw(to: ByStr20)
 end
 
 transition Claim()
-  canClaim;
-  withdrawStakeRewards
+  current_block <- & BLOCKNUMBER;
+
+  canClaim current_block;
+  withdrawStakeRewards;
+
+  last_claim := current_block
 end
 
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
