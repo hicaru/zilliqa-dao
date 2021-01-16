@@ -103,13 +103,16 @@ procedure canClaim()
   for_claim <- blocks_for_claim;
   current_last_claim <- last_claim;
 
-  difference = builtin sub current_block current_last_claim;
-  is_can_claim = builtin gt difference for_claim;
+  bn_zero = BNum 0;
+  difference = builtin bsub current_block current_last_claim;
+  int_256_for_claim = builtin bsub for_claim bn_zero;
+  is_can_claim = builtin lt int_256_for_claim difference;
 
   match is_can_claim with
   | False =>
     err = CodeBlocksEarly;
     ThrowError err
+  | True =>
   end
 end
 
