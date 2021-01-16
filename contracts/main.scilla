@@ -31,7 +31,7 @@ type Operation =
 type Error =
   | CodeInsufficientAmount
   | CodeIsNotGZILContract
-  | CodePausenot_pause
+  | CodePauseNotPause
   | CodeNotAuthorised
   | CodeIsNotOwnerOrOperator
 
@@ -41,7 +41,7 @@ let make_error =
       match result with
       | CodeInsufficientAmount   => Int32 -1
       | CodeIsNotGZILContract    => Int32 -2
-      | CodePausenot_pause       => Int32 -3
+      | CodePauseNotPause        => Int32 -3
       | CodeNotAuthorised        => Int32 -4
       | CodeIsNotOwnerOrOperator => Int32 -5
       end
@@ -91,7 +91,7 @@ procedure checkPause(expected: Uint32)
   match is_eq with
   | True =>
   | False =>
-    err = CodePausenot_pause;
+    err = CodePauseNotPause;
     ThrowError err
   end
 end
@@ -166,13 +166,13 @@ procedure delegateStake(amount: Uint128)
 end
 
 procedure withdrawStakeRewards()
-  delegate_call = {
+  withdraw_call = {
     _tag: "WithdrawStakeRewards";
     _recipient: proxy_staking_contract;
     _amount: Uint128 0;
     ssnaddr: default_ssn
   };
-  msgs = one_msg delegate_call;
+  msgs = one_msg withdraw_call;
   send msgs
 end
 
@@ -331,6 +331,9 @@ transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint
   new_token_balance = builtin add current_token_balance amount;
 
   token_balance := new_token_balance
+end
+
+transition AddFunds()
 end
 
 transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
