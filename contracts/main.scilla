@@ -173,9 +173,7 @@ procedure addGZIL(from: ByStr20, amount: Uint128)
   updateTokenCount add_operation from amount
 end
 
-procedure delegateStake()
-  amount <- _balance;
-
+procedure delegateStake(amount: Uint128)
   delegate_call = {
     _tag: "DelegateStake";
     _recipient: proxy_staking_contract;
@@ -315,7 +313,7 @@ transition Deposit()
     donator[_sender] := _amount;
     delegated := new_delegated;
 
-    delegateStake;
+    delegateStake _amount;
 
     e = {
       _eventname: "DepositEvent";
