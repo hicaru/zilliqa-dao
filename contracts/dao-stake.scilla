@@ -28,6 +28,7 @@ let option_value =
 type Error =
   | CodeInsufficientAmount
   | CodeIsNotGZILContract
+  | CodeIsNotVoteContract
   | CodePauseNotPause
   | CodeNotAuthorised
   | CodeBlocksEarly
@@ -38,9 +39,10 @@ let make_error =
       match result with
       | CodeInsufficientAmount   => Int32 -1
       | CodeIsNotGZILContract    => Int32 -2
-      | CodePauseNotPause        => Int32 -3
-      | CodeNotAuthorised        => Int32 -4
-      | CodeBlocksEarly          => Int32 -5
+      | CodeIsNotVoteContract    => Int32 -3
+      | CodePauseNotPause        => Int32 -4
+      | CodeNotAuthorised        => Int32 -5
+      | CodeBlocksEarly          => Int32 -6
       end
     in
     { _exception : "Error"; code : result_code }
@@ -55,7 +57,8 @@ contract DaoStake
 (contract_owner: ByStr20,
  proxy_staking_contract: ByStr20,
  gzil_contract: ByStr20,
- default_ssn: ByStr20)
+ default_ssn: ByStr20,
+ vote_contract: ByStr20)
 
 (* Mutable fields *)
 
@@ -64,6 +67,7 @@ field pause: Uint32 = not_pause
 
 field last_claim: BNum = zero_bn
 field blocks_for_claim: BNum = BNum 1800
+field vote_contract_address: ByStr20 = vote_contract
 
 field delegated: Uint128 = Uint128 0
 field token_balance: Uint128 = Uint128 0
@@ -114,6 +118,19 @@ procedure isGZILContract()
   end
 end
 
+procedure isVoteContract()
+  vote_addr <- vote_contract_address;
+
+  is_vote_contract = builtin eq vote_addr _sender;
+
+  match is_vote_contract with
+  | True =>
+  | False =>
+    err = CodeIsNotVoteContract;
+    ThrowError err
+  end
+end
+
 procedure delegateStake(amount: Uint128)
   delegate_call = {
     _tag: "DelegateStake";
@@ -125,6 +142,7 @@ procedure delegateStake(amount: Uint128)
   send msgs
 end
 
+(* Calling withdrawStake from stake contract. *)
 procedure withdrawStakeRewards()
   withdraw_call = {
     _tag: "WithdrawStakeRewards";
@@ -180,6 +198,22 @@ transition ChangePause()
   | False =>
     pause := on_pause
   end
+end
+
+transition UpdateVoteContract(addr: ByStr20)
+  IsOwner;
+  checkPause not_pause;
+
+  old_contract <- vote_contract_address;
+
+  e = {
+    _eventname: "VoteContractUpdateEvent";
+    old: old_contract;
+    new: addr
+  };
+  event e;
+
+  vote_contract_address := addr
 end
 
 transition Deposit()
