@@ -2,7 +2,7 @@ scilla_version 0
 
 import BoolUtils
 
-library ZilliqaDAO
+library DaoStake
 
 (* Constants *)
 let not_pause = Uint32 0
@@ -50,7 +50,7 @@ let option_uint128 = @option_value Uint128
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
-contract ZilliqaDAO
+contract DaoStake
 (*  Parameters *)
 (contract_owner: ByStr20,
  proxy_staking_contract: ByStr20,
