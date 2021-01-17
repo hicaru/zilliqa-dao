@@ -328,7 +328,7 @@ transition Deposit()
 end
 
 transition Withdraw(to: ByStr20)
-  checkPause on_pause;
+  checkPause not_pause;
   isOwnerOrOperator to;
   withdrawGZIL to
 end
