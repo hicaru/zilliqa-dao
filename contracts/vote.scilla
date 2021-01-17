@@ -1,0 +1,236 @@
+scilla_version 0
+
+import BoolUtils
+
+library DaoVote
+
+(* Constants *)
+let not_pause = Uint32 0
+let on_pause  = Uint32 1
+let zero_128  = Uint128 1
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+type Operation =
+  | Add
+  | Sub
+
+(* Error events *)
+type Error =
+  | CodeInsufficientAmount
+  | CodeIsNotGZILContract
+  | CodePauseNotPause
+  | CodeNotAuthorised
+  | CodeIsNotOwnerOrOperator
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeInsufficientAmount   => Int32 -1
+      | CodeIsNotGZILContract    => Int32 -2
+      | CodePauseNotPause        => Int32 -3
+      | CodeNotAuthorised        => Int32 -4
+      | CodeIsNotOwnerOrOperator => Int32 -5
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+let add_operation = Add
+let sub_operation = Sub
+
+let option_uint128 = @option_value Uint128
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+contract DaoVote
+(*  Parameters *)
+(contract_owner: ByStr20,
+ gzil_contract: ByStr20)
+
+(* Mutable fields *)
+(* Minimal gZIL for donate. *)
+field min_gzil: Uint128 = Uint128 10
+(* State of contract pause. *)
+field pause: Uint32 = not_pause
+
+field voters: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+(* Checking contract on pause state. *)
+procedure checkPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
+    ThrowError err
+  end
+end
+
+procedure isOwnerOrOperator(to: ByStr20)
+  some_operator <- operators[to];
+
+  is_operator = match some_operator with
+    | None => False
+    | Some operator =>
+      builtin eq operator _sender
+    end;
+
+  is_owner = builtin eq to _sender;
+  is_allow = orb is_operator is_owner;
+
+  match is_allow with
+  | True =>
+  | False =>
+    err = CodeIsNotOwnerOrOperator;
+    ThrowError err
+  end
+end
+
+procedure isGZILContract()
+  is_zlp_sender = builtin eq gzil_contract _sender;
+
+  match is_zlp_sender with
+  | True =>
+  | False =>
+    err = CodeIsNotGZILContract;
+    ThrowError err
+  end
+end
+
+procedure updateTokenCount(operation: Operation, address: ByStr20, amount: Uint128)
+  some_to_count <- voters[address];
+  current_count = option_uint128 zero_128 some_to_count;
+
+  match operation with
+  | Add =>
+    new_to_count = builtin add current_count amount;
+    voters[address] := new_to_count
+  | Sub =>
+    is_insufficient = builtin lt current_count amount;
+    match is_insufficient with
+      | False => 
+        new_to_count = builtin sub current_count amount;
+        voters[address] := new_to_count
+      | True =>
+        err = CodeInsufficientAmount;
+        ThrowError err
+      end
+  end
+end
+
+procedure addGZIL(from: ByStr20, amount: Uint128)
+  checkPause not_pause;
+  isGZILContract;
+  updateTokenCount add_operation from amount
+end
+
+procedure callTransfer(addres: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "Transfer";
+    _recipient: gzil_contract;
+    _amount: zero_128;
+    to: addres;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
+procedure withdrawGZIL(to: ByStr20)
+  some_balance <- voters[to];
+
+  match some_balance with
+  | Some balance =>
+    updateTokenCount sub_operation to balance;
+    callTransfer to balance
+  | None =>
+    err = CodeInsufficientAmount;
+    ThrowError err
+  end
+end
+
+(* Checking contract owner is _sender. *)
+procedure IsOwner()
+  is_owner = builtin eq contract_owner _sender;
+
+  match is_owner with
+  | True =>
+  | False =>
+    err = CodeNotAuthorised;
+    ThrowError err
+  end
+end
+
+transition SetMinGZIL(amount: Uint128)
+  IsOwner;
+
+  old_state <- min_gzil;
+
+  min_gzil := amount;
+
+  e = {
+    _eventname: "MinimalVoteGZILChanged";
+    old: old_state;
+    new: amount
+  };
+  event e
+end
+
+transition ChangePause()
+  IsOwner;
+  status <- pause;
+  is_pause = builtin eq status on_pause;
+
+  e = {
+    _eventname: "PauseEvent";
+    pause: is_pause
+  };
+  event e;
+
+  match is_pause with
+  | True =>
+    pause := not_pause
+  | False =>
+    pause := on_pause
+  end
+end
+
+transition Withdraw(to: ByStr20)
+  checkPause not_pause;
+  isOwnerOrOperator to;
+  withdrawGZIL to
+end
+
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+  addGZIL sender amount
+end
+
+transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+  addGZIL sender amount;
+  operators[sender] := initiator
+end
+
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
