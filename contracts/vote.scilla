@@ -23,6 +23,9 @@ let option_value =
     | None => default
     end
 
+type Vote =
+  | Vote of Uint256 ByStr20 String (List Uint32)
+
 type Operation =
   | Add
   | Sub
@@ -59,7 +62,8 @@ let option_uint128 = @option_value Uint128
 contract DaoVote
 (*  Parameters *)
 (contract_owner: ByStr20,
- gzil_contract: ByStr20)
+ gzil_contract: ByStr20,
+ dao_stake: ByStr20)
 
 (* Mutable fields *)
 (* Minimal gZIL for donate. *)
