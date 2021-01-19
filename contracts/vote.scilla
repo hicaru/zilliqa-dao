@@ -23,11 +23,13 @@ let option_value =
     | None => default
     end
 
+(* Cusstom ADT. Voter, variant, tokens *)
 type Vote =
-  | Vote of ByStr20 String Uint32
+  | Vote of ByStr20 Bool Uint128
 
+(* Cusstom ADT. Creater, ipfs, locked, quorum, end-time *)
 type Proposal =
-  | Vote of ByStr20 String Uint32
+  | Proposal of ByStr20 String Uint128 Uint128 BNum
 
 type Operation =
   | Add
@@ -69,8 +71,10 @@ contract DaoVote
  dao_stake: ByStr20)
 
 (* Mutable fields *)
-(* Minimal gZIL for donate. *)
-field min_gzil: Uint128 = Uint128 10
+(* Minimal gZIL for create proposal. *)
+field min_proposal_amount: Uint128 = Uint128 10
+(* Minimal gZIL for create vote. *)
+field min_vote_amount: Uint128 = Uint128 1
 (* State of contract pause. *)
 field pause: Uint32 = not_pause
 
@@ -148,7 +152,6 @@ procedure updateTokenCount(operation: Operation, address: ByStr20, amount: Uint1
 end
 
 procedure addGZIL(from: ByStr20, amount: Uint128)
-  checkPause not_pause;
   isGZILContract;
   updateTokenCount add_operation from amount
 end
@@ -190,17 +193,22 @@ procedure IsOwner()
   end
 end
 
-transition SetMinGZIL(amount: Uint128)
+(* transitions *)
+transition SetMinGZIL(min_proposal: Uint128, min_vote: Uint128)
   IsOwner;
 
-  old_state <- min_gzil;
+  old_min_proposal <- min_proposal_amount;
+  old_min_vote <- min_vote_amount;
 
-  min_gzil := amount;
+  min_proposal_amount := min_proposal;
+  min_vote_amount := min_vote;
 
   e = {
     _eventname: "MinimalVoteGZILChanged";
-    old: old_state;
-    new: amount
+    old_min_proposal: old_min_proposal;
+    old_min_vote: old_min_vote;
+    new_min_proposal: min_proposal;
+    new_min_vote: min_vote
   };
   event e
 end
@@ -228,7 +236,9 @@ transition Withdraw(to: ByStr20)
   isOwnerOrOperator to;
   withdrawGZIL to
 end
+(* transitions *)
 
+(* callbacks *)
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   addGZIL recipient amount
 end
@@ -240,3 +250,4 @@ end
 
 transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
+(* callbacks *)
