@@ -143,6 +143,8 @@ procedure isVoteContract()
 end
 
 procedure callTransfer(to: ByStr20, amount: Uint128)
+  vote_contract <- vote_contract_address;
+
   msg_transfer = {
     _tag: "Transfer";
     _recipient: gzil_contract;
@@ -384,6 +386,16 @@ transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint
 
   token_balance := new_token_balance
 end
+
+(*  *)
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+  (* Need check  recipient to eq this_address *)
+  current_token_balance <- token_balance;
+  new_token_balance = builtin add current_token_balance amount;
+
+  token_balance := new_token_balance
+end
+(*  *)
 
 transition AddFunds()
   accept
