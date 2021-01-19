@@ -7,7 +7,7 @@ library DaoStake
 (* Constants *)
 let not_pause = Uint32 0
 let on_pause  = Uint32 1
-let zero_128  = Uint128 1
+let zero_128  = Uint128 0
 let zero_bn  = BNum 0
 let zero_address = 0x0000000000000000000000000000000000000000
 
@@ -33,6 +33,7 @@ type Error =
   | CodePauseNotPause
   | CodeNotAuthorised
   | CodeBlocksEarly
+  | LimitSelfBalance
 
 let make_error =
   fun (result : Error) =>
@@ -44,6 +45,7 @@ let make_error =
       | CodePauseNotPause        => Int32 -4
       | CodeNotAuthorised        => Int32 -5
       | CodeBlocksEarly          => Int32 -6
+      | LimitSelfBalance         => Int32 -7
       end
     in
     { _exception : "Error"; code : result_code }
@@ -69,6 +71,7 @@ field max_gzil_reward: Uint128 = Uint128 100
 field last_claim: BNum = zero_bn
 field blocks_for_claim: BNum = BNum 1800
 field vote_contract_address: ByStr20 = zero_address
+field locked_balance: Uint128 = zero_128
 
 field delegated: Uint128 = Uint128 0
 field token_balance: Uint128 = Uint128 0
@@ -229,6 +232,29 @@ transition UpdateVoteContract(addr: ByStr20)
   event e;
 
   vote_contract_address := addr
+end
+
+transition LockBalance(value: Uint128)
+  isVoteContract;
+
+  self_balance <- _balance;
+  self_locked_balance <- locked_balance;
+
+  unlocked_balance = builtin sub self_balance self_locked_balance;
+  is_limit = builtin lt unlocked_balance value;
+
+  match is_limit with
+  | True =>
+    err = LimitSelfBalance;
+    ThrowError err
+  | False =>
+    new_locked = builtin add self_locked_balance value;
+    locked_balance := new_locked
+  end
+end
+
+transition DEV_DEPOSIT()
+  accept
 end
 
 transition Deposit()
