@@ -360,12 +360,19 @@ transition SendGZILReward(to: ByStr20)
   checkPause not_pause;
   isVoteContract;
 
-  self_token_balance <- locked_balance;
+  self_token_balance <- token_balance;
   percent <- max_gzil_reward;
 
   amount = get_percent self_token_balance percent;
+  is_zero = builtin eq amount zero_128;
 
-  callTransfer to amount
+  match is_zero with
+  | True =>
+    err = CodeInsufficientAmount;
+    ThrowError err
+  | False =>
+    callTransfer to amount
+  end
 end
 
 transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint128)
