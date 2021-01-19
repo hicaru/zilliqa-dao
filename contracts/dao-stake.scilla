@@ -158,6 +158,24 @@ procedure withdrawStakeRewards()
   send msgs
 end
 
+procedure transferZIL(amount: Uint128, to: ByStr20)
+  e = {
+    _eventname : "TransferZILEvent";
+    amount: amount;
+    to: to
+  };
+  event e;
+
+  msg = {
+    _tag: "";
+    _recipient: to;
+    _amount: amount
+  };
+
+  msgs = one_msg msg;
+  send msgs
+end
+
 (* Checking contract owner is _sender. *)
 procedure IsOwner()
   is_owner = builtin eq contract_owner _sender;
@@ -172,6 +190,7 @@ end
 
 transition SetBlocksForClaim(value: BNum)
   IsOwner;
+  checkPause not_pause;
 
   old_state <- blocks_for_claim;
 
@@ -206,6 +225,7 @@ end
 
 transition ChangeMaxGZILReward(new_value: Uint128)
   IsOwner;
+  checkPause not_pause;
   max_reward <- max_gzil_reward;
 
   e = {
@@ -235,6 +255,7 @@ transition UpdateVoteContract(addr: ByStr20)
 end
 
 transition LockBalance(value: Uint128)
+  checkPause not_pause;
   isVoteContract;
 
   self_balance <- _balance;
@@ -253,11 +274,31 @@ transition LockBalance(value: Uint128)
   end
 end
 
+transition TranferLockBalance(value: Uint128, to: ByStr20)
+  checkPause not_pause;
+  isVoteContract;
+
+  self_locked_balance <- locked_balance;
+
+  is_limit = builtin lt self_locked_balance value;
+
+  match is_limit with
+  | True =>
+    err = LimitSelfBalance;
+    ThrowError err
+  | False =>
+    new_locked = builtin sub self_locked_balance value;
+    locked_balance := new_locked;
+    transferZIL value to
+  end
+end
+
 transition DEV_DEPOSIT()
   accept
 end
 
 transition Deposit()
+  checkPause not_pause;
   delegated_amount <- delegated;
   some_last_deposit <- donator[_sender];
 
@@ -287,6 +328,7 @@ transition Deposit()
 end
 
 transition Claim()
+  checkPause not_pause;
   current_block <- & BLOCKNUMBER;
 
   canClaim current_block;
