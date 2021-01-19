@@ -314,6 +314,17 @@ transition TranferLockBalance(value: Uint128, to: ByStr20)
   end
 end
 
+transition UnlockBalance(amount: Uint128)
+  checkPause not_pause;
+  isVoteContract;
+
+  self_locked_balance <- locked_balance;
+
+  new_locked_balance = builtin sub self_locked_balance amount;
+
+  locked_balance := new_locked_balance;
+end
+
 transition DEV_DEPOSIT()
   accept
 end
@@ -387,7 +398,7 @@ transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint
   token_balance := new_token_balance
 end
 
-(*  *)
+(* DEV *)
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   (* Need check  recipient to eq this_address *)
   current_token_balance <- token_balance;
@@ -395,7 +406,7 @@ transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: 
 
   token_balance := new_token_balance
 end
-(*  *)
+(* DEV *)
 
 transition AddFunds()
   accept
