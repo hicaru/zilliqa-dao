@@ -24,7 +24,10 @@ let option_value =
     end
 
 type Vote =
-  | Vote of Uint256 ByStr20 String (List Uint32)
+  | Vote of ByStr20 String Uint32
+
+type Proposal =
+  | Vote of ByStr20 String Uint32
 
 type Operation =
   | Add

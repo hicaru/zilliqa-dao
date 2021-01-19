@@ -64,6 +64,7 @@ contract DaoStake
 
 (* State of contract pause. *)
 field pause: Uint32 = not_pause
+field max_gzil_reward: Uint128 = Uint128 100
 
 field last_claim: BNum = zero_bn
 field blocks_for_claim: BNum = BNum 1800
@@ -198,6 +199,20 @@ transition ChangePause()
   | False =>
     pause := on_pause
   end
+end
+
+transition ChangeMaxGZILReward(new_value: Uint128)
+  IsOwner;
+  max_reward <- max_gzil_reward;
+
+  e = {
+    _eventname: "ChangeMaxGZILRewardEvent";
+    old: max_reward;
+    new: new_value
+  };
+  event e;
+
+  max_gzil_reward := new_value
 end
 
 transition UpdateVoteContract(addr: ByStr20)
