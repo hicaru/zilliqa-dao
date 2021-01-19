@@ -153,12 +153,12 @@ procedure addGZIL(from: ByStr20, amount: Uint128)
   updateTokenCount add_operation from amount
 end
 
-procedure callTransfer(addres: ByStr20, amount: Uint128)
+procedure callTransfer(to: ByStr20, amount: Uint128)
   msg_transfer = {
     _tag: "Transfer";
     _recipient: gzil_contract;
     _amount: zero_128;
-    to: addres;
+    to: to;
     amount: amount
   };
   msgs = one_msg msg_transfer;

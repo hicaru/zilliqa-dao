@@ -5,11 +5,12 @@ import BoolUtils
 library DaoStake
 
 (* Constants *)
-let not_pause = Uint32 0
-let on_pause  = Uint32 1
-let zero_128  = Uint128 0
-let zero_bn  = BNum 0
-let zero_address = 0x0000000000000000000000000000000000000000
+let not_pause       = Uint32 0
+let on_pause        = Uint32 1
+let zero_128        = Uint128 0
+let one_hundred_128 = Uint128 100
+let zero_bn         = BNum 0
+let zero_address    = 0x0000000000000000000000000000000000000000
 
 let one_msg = 
   fun (msg : Message) => 
@@ -24,6 +25,12 @@ let option_value =
     | Some v => v
     | None => default
     end
+
+let get_percent =
+  fun (amount: Uint128) =>
+  fun (percent: Uint128) =>
+    let value = builtin div amount one_hundred_128 in
+    builtin mul value percent
 
 (* Error events *)
 type Error =
@@ -66,7 +73,7 @@ contract DaoStake
 
 (* State of contract pause. *)
 field pause: Uint32 = not_pause
-field max_gzil_reward: Uint128 = Uint128 100
+field max_gzil_reward: Uint128 = Uint128 10
 
 field last_claim: BNum = zero_bn
 field blocks_for_claim: BNum = BNum 1800
@@ -133,6 +140,18 @@ procedure isVoteContract()
     err = CodeIsNotVoteContract;
     ThrowError err
   end
+end
+
+procedure callTransfer(to: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "Transfer";
+    _recipient: gzil_contract;
+    _amount: zero_128;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
 end
 
 procedure delegateStake(amount: Uint128)
@@ -335,6 +354,18 @@ transition Claim()
   withdrawStakeRewards;
 
   last_claim := current_block
+end
+
+transition SendGZILReward(to: ByStr20)
+  checkPause not_pause;
+  isVoteContract;
+
+  self_token_balance <- locked_balance;
+  percent <- max_gzil_reward;
+
+  amount = get_percent self_token_balance percent;
+
+  callTransfer to amount
 end
 
 transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint128)
