@@ -322,7 +322,7 @@ transition UnlockBalance(amount: Uint128)
 
   new_locked_balance = builtin sub self_locked_balance amount;
 
-  locked_balance := new_locked_balance;
+  locked_balance := new_locked_balance
 end
 
 transition DEV_DEPOSIT()
@@ -413,6 +413,9 @@ transition AddFunds()
 end
 
 transition DelegateStakeSuccessCallBack(ssnaddr: ByStr20, amount: Uint128)
+end
+
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 
 transition WithdrawStakeRewardsSuccessCallBack(ssnaddr: ByStr20, rewards: Uint128)
