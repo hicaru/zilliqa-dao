@@ -23,13 +23,9 @@ let option_value =
     | None => default
     end
 
-(* Cusstom ADT. Voter, variant, tokens *)
-type Vote =
-  | Vote of ByStr20 Bool Uint128
-
-(* Cusstom ADT. Creater, ipfs, locked, quorum, end-time *)
+(* Cusstom ADT. ipfs, want ZIL amount, locked gZIL,  *)
 type Proposal =
-  | Proposal of ByStr20 String Uint128 Uint128 BNum
+  | Proposal of String Uint128 Uint128
 
 type Operation =
   | Add
@@ -42,6 +38,7 @@ type Error =
   | CodePauseNotPause
   | CodeNotAuthorised
   | CodeIsNotOwnerOrOperator
+  | CodeProposalNotFound
 
 let make_error =
   fun (result : Error) =>
@@ -52,6 +49,7 @@ let make_error =
       | CodePauseNotPause        => Int32 -3
       | CodeNotAuthorised        => Int32 -4
       | CodeIsNotOwnerOrOperator => Int32 -5
+      | CodeProposalNotFound     => Int32 -6
       end
     in
     { _exception : "Error"; code : result_code }
@@ -72,12 +70,14 @@ contract DaoVote
 
 (* Mutable fields *)
 (* Minimal gZIL for create proposal. *)
-field min_proposal_amount: Uint128 = Uint128 10
+field min_proposal_amount: Uint128 = Uint128 10000000000000000
 (* Minimal gZIL for create vote. *)
 field min_vote_amount: Uint128 = Uint128 1
 (* State of contract pause. *)
 field pause: Uint32 = not_pause
+field quorum: Uint128 = Uint128 10
 
+field map_proposals: Map ByStr20 Proposal = Emp ByStr20 Proposal
 field voters: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
 
@@ -168,6 +168,19 @@ procedure callTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
+procedure callTransferFrom(from: ByStr20, to: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "TransferFrom";
+    _recipient: gzil_contract;
+    _amount: zero_128;
+    from: from;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
 procedure withdrawGZIL(to: ByStr20)
   some_balance <- voters[to];
 
@@ -235,6 +248,34 @@ end
 transition Withdraw(to: ByStr20)
   isOwnerOrOperator to;
   withdrawGZIL to
+end
+
+(* TODO: added transition change `min_proposal_amount` *)
+(* TODO: added transition for remove proposal (onwer, admin) *)
+
+transition AddProposal(ipfs: String, amount: Uint128)
+  gzil <- min_proposal_amount;
+
+  callTransferFrom _sender _this_address gzil;
+  
+  new_proposal = Proposal ipfs amount gzil;
+
+  map_proposals[_sender] := new_proposal
+end
+
+transition VoteProposal(proposal_owner: ByStr20)
+  some_proposal <- map_proposals[proposal_owner];
+  some_voter <- voters[_sender];
+
+  vote_power = option_uint128 zero_128 some_voter;
+
+  match some_proposal with
+  | Some proposal =>
+
+  | None =>
+    err = CodeProposalNotFound;
+    ThrowError err
+  end
 end
 (* transitions *)
 
