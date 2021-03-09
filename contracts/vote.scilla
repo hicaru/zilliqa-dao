@@ -307,6 +307,8 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
 end
 
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+  addGZIL recipient amount;
+  operators[sender] := initiator
 end
 
 transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
