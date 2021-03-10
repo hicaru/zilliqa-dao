@@ -172,15 +172,26 @@ procedure callTransfer(to: ByStr20, amount: Uint128)
 end
 
 (* WARN: voter can vote more then one. *)
-procedure addVotePower(proposal: Proposal, power: Uint128, variant: Bool)
-  match proposal with
-  | Proposal ipfs amount gzil yes no =>
-    match variant with
-    | True =>
-      new_yes = builtin add yes power;
-      updated_proposal = Proposal ipfs amount gzil yes no;
-    | False =>
+procedure addVotePower(proposal_owner: ByStr20, power: Uint128, variant: Bool)
+  some_proposal <- map_proposals[proposal_owner];
+
+  match some_proposal with
+  | Some proposal =>
+    match proposal with
+    | Proposal ipfs amount gzil yes no =>
+      match variant with
+      | True =>
+        new_yes = builtin add yes power;
+        updated_proposal = Proposal ipfs amount gzil yes no;
+        map_proposals[_sender] := new_proposal
+      | False =>
+        new_yes = builtin add no power;
+        updated_proposal = Proposal ipfs amount gzil yes no;
+      end
     end
+  | None =>
+    err = CodeProposalNotFound;
+    ThrowError err
   end
 end
 
@@ -280,19 +291,12 @@ transition AddProposal(ipfs: String, amount: Uint128)
   map_proposals[_sender] := new_proposal
 end
 
-transition VoteProposal(proposal_owner: ByStr20)
-  some_proposal <- map_proposals[proposal_owner];
+transition VoteProposal(proposal_owner: ByStr20, variant: Uint128)
   some_voter <- voters[_sender];
 
   vote_power = option_uint128 zero_128 some_voter;
 
-  match some_proposal with
-  | Some proposal =>
-
-  | None =>
-    err = CodeProposalNotFound;
-    ThrowError err
-  end
+  addVotePower proposal_owner vote_power variant
 end
 (* transitions *)
 
