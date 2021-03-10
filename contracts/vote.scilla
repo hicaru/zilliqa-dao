@@ -75,12 +75,14 @@ field min_proposal_amount: Uint128 = Uint128 10000000000000000
 field min_vote_amount: Uint128 = Uint128 1
 (* State of contract pause. *)
 field pause: Uint32 = not_pause
-field quorum: Uint128 = Uint128 10
+(* current_quorum is 0.1 * total_suplay *)
+field current_quorum: Uint128 = Uint128 34394139733186605
 
 field map_proposals: Map ByStr20 Proposal = Emp ByStr20 Proposal
 field map_vote_power: Map ByStr20 (Map Uint32 Uint128) 
   = Emp ByStr20 (Map Uint32 Uint128)
-field voters: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field token_holders: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field grant_amounts: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 
 field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
 
@@ -134,19 +136,19 @@ procedure isGZILContract()
 end
 
 procedure updateTokenCount(operation: Operation, address: ByStr20, amount: Uint128)
-  some_to_count <- voters[address];
+  some_to_count <- token_holders[address];
   current_count = option_uint128 zero_128 some_to_count;
 
   match operation with
   | Add =>
     new_to_count = builtin add current_count amount;
-    voters[address] := new_to_count
+    token_holders[address] := new_to_count
   | Sub =>
     is_insufficient = builtin lt current_count amount;
     match is_insufficient with
       | False => 
         new_to_count = builtin sub current_count amount;
-        voters[address] := new_to_count
+        token_holders[address] := new_to_count
       | True =>
         err = CodeInsufficientAmount;
         ThrowError err
@@ -171,6 +173,16 @@ procedure callTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
+procedure SendZIL(to: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "";
+    _recipient: to;
+    _amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
 (* WARN: voter can vote more then one. *)
 procedure addVotePower(proposal_owner: ByStr20, power: Uint128, variant: Bool)
   some_proposal <- map_proposals[proposal_owner];
@@ -183,10 +195,10 @@ procedure addVotePower(proposal_owner: ByStr20, power: Uint128, variant: Bool)
       | True =>
         new_yes = builtin add yes power;
         updated_proposal = Proposal ipfs amount gzil yes no;
-        map_proposals[_sender] := new_proposal
+        map_proposals[_sender] := updated_proposal
       | False =>
         new_yes = builtin add no power;
-        updated_proposal = Proposal ipfs amount gzil yes no;
+        updated_proposal = Proposal ipfs amount gzil yes no
       end
     end
   | None =>
@@ -209,7 +221,7 @@ procedure callTransferFrom(from: ByStr20, to: ByStr20, amount: Uint128)
 end
 
 procedure withdrawGZIL(to: ByStr20)
-  some_balance <- voters[to];
+  some_balance <- token_holders[to];
 
   match some_balance with
   | Some balance =>
@@ -272,9 +284,29 @@ transition ChangePause()
   end
 end
 
-transition Withdraw(to: ByStr20)
+transition WithdrawTokens(to: ByStr20)
   isOwnerOrOperator to;
   withdrawGZIL to
+end
+
+transition WithdrawZIL()
+  some_grant_amount <- grant_amounts[_sender];
+  bal <- _balance;
+
+  grant_amount = option_uint128 zero_128 some_grant_amount;
+  is_lt = builtin lt bal grant_amount;
+
+  match is_lt with
+  | True =>
+    new_amount = builtin sub grant_amount bal;
+
+    grant_amounts[_sender] := new_amount;
+
+    SendZIL _sender bal
+  | False =>
+    delete grant_amounts[_sender];
+    SendZIL _sender grant_amount
+  end
 end
 
 (* TODO: added transition change `min_proposal_amount` *)
@@ -283,7 +315,7 @@ end
 
 transition AddProposal(ipfs: String, amount: Uint128)
   gzil <- min_proposal_amount;
-
+  (* Add check the token_holders. *)
   callTransferFrom _sender _this_address gzil;
   
   new_proposal = Proposal ipfs amount gzil zero_128 zero_128;
@@ -291,27 +323,61 @@ transition AddProposal(ipfs: String, amount: Uint128)
   map_proposals[_sender] := new_proposal
 end
 
-transition VoteProposal(proposal_owner: ByStr20, variant: Uint128)
-  some_voter <- voters[_sender];
+(* TODO: add map proposal: voter *)
+transition VoteProposal(proposal_owner: ByStr20, variant: Bool)
+  some_voter <- token_holders[_sender];
 
   vote_power = option_uint128 zero_128 some_voter;
 
   addVotePower proposal_owner vote_power variant
 end
+
+transition EndVote(proposal_owner: ByStr20)
+  some_proposal <- map_proposals[proposal_owner];
+  quorum <- current_quorum;
+  some_grant <- grant_amounts[proposal_owner];
+
+  match some_proposal with
+  | Some proposal =>
+    match proposal with
+    | Proposal ipfs amount gzil yes no =>
+      sum = builtin add yes no;
+      is_quorum = builtin lt quorum sum;
+      is_confirm = builtin lt no yes;
+
+      match is_quorum with
+      | True =>
+        match is_confirm with
+        | True =>
+          grant_amount = option_uint128 zero_128 some_grant;
+          new_amount = builtin add grant_amount amount;
+          grant_amounts[proposal_owner] := new_amount
+        | False =>
+        end;
+
+        delete map_proposals[proposal_owner]
+      | False =>
+      end
+    end
+  | None =>
+    err = CodeProposalNotFound;
+    ThrowError err
+  end
+end
 (* transitions *)
 
 (* callbacks *)
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
-  addGZIL recipient amount
+  addGZIL sender amount
 end
 
 transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
-  addGZIL recipient amount;
+  addGZIL sender amount;
   operators[sender] := initiator
 end
 
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
-  addGZIL recipient amount;
+  addGZIL sender amount;
   operators[sender] := initiator
 end
 
